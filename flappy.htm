@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Flappy Box - Powerups, High Score & Skins</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #000;
+      overflow: hidden;
+      font-family: sans-serif;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    #game {
+      position: relative;
+      width: 400px;
+      height: 600px;
+      background: #111;
+      overflow: hidden;
+    }
+    #player {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      top: 200px;
+      left: 50px;
+    }
+    .rainbow {
+      animation: rainbow 1s infinite;
+    }
+    @keyframes rainbow {
+      0% { background: red; }
+      25% { background: orange; }
+      50% { background: lime; }
+      75% { background: blue; }
+      100% { background: violet; }
+    }
+    .pipe {
+      position: absolute;
+      width: 60px;
+      background: green;
+    }
+    .powerup {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+    }
+    .boost { background: gold; }
+    .shield { background: dodgerblue; }
+    .slow { background: purple; }
+    #score, #highscore, #status {
+      position: absolute;
+      left: 10px;
+      font-size: 18px;
+    }
+    #score { top: 10px; }
+    #highscore { top: 35px; }
+    #status { top: 60px; color: lightgreen; }
+    #skinBtn {
+      position: absolute;
+      right: 10px;
+      top: 10px;
+      font-size: 14px;
+      padding: 5px 10px;
+      background: #444;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <div id="player"></div>
+    <div id="score">Score: 0</div>
+    <div id="highscore">High Score: 0</div>
+    <div id="status"></div>
+    <button id="skinBtn">Change Skin</button>
+  </div>
+
+  <script>
+    const game = document.getElementById('game');
+    const player = document.getElementById('player');
+    const scoreDisplay = document.getElementById('score');
+    const highScoreDisplay = document.getElementById('highscore');
+    const statusDisplay = document.getElementById('status');
+    const skinBtn = document.getElementById('skinBtn');
+
+    let gravity = 0.5;
+    let velocity = 0;
+    let score = 0;
+    let highScore = localStorage.getItem('flappyHighScore') || 0;
+    let gameOver = false;
+    let shieldActive = false;
+    let slowActive = false;
+    let pipeSpeed = 2;
+
+    // Skins
+    const skins = ['blue', 'red', 'rainbow'];
+    let currentSkin = localStorage.getItem('flappySkin') || prompt("Choose a skin: blue, red, or rainbow", "blue");
+
+    applySkin(currentSkin);
+
+    skinBtn.onclick = () => {
+      const choice = prompt("Choose a skin: blue, red, or rainbow", currentSkin);
+      if (skins.includes(choice)) {
+        currentSkin = choice;
+        localStorage.setItem('flappySkin', choice);
+        applySkin(choice);
+      }
+    };
+
+    function applySkin(skin) {
+      player.className = '';
+      if (skin === 'rainbow') {
+        player.classList.add('rainbow');
+      } else {
+        player.style.background = skin;
+      }
+    }
+
+    highScoreDisplay.textContent = 'High Score: ' + highScore;
+
+    function flap() {
+      velocity = -8;
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') flap();
+    });
+    document.addEventListener('click', flap);
+
+    function createPipe() {
+      const gap = 140;
+      const topHeight = Math.floor(Math.random() * 300) + 20;
+      const bottomHeight = 600 - topHeight - gap;
+
+      const topPipe = document.createElement('div');
+      topPipe.classList.add('pipe');
+      topPipe.style.height = topHeight + 'px';
+      topPipe.style.top = '0px';
+      topPipe.style.left = '400px';
+
+      const bottomPipe = document.createElement('div');
+      bottomPipe.classList.add('pipe');
+      bottomPipe.style.height = bottomHeight + 'px';
+      bottomPipe.style.bottom = '0px';
+      bottomPipe.style.left = '400px';
+
+      game.appendChild(topPipe);
+      game.appendChild(bottomPipe);
+
+      // Power-up chance
+      if (Math.random() < 0.5) {
+        const yMid = topHeight + gap / 2;
+        const types = ['boost', 'shield', 'slow'];
+        const type = types[Math.floor(Math.random() * types.length)];
+        createPowerUp(yMid, type);
+      }
+
+      let pipeX = 400;
+      const movePipe = setInterval(() => {
+        if (gameOver) return clearInterval(movePipe);
+        pipeX -= pipeSpeed;
+        topPipe.style.left = pipeX + 'px';
+        bottomPipe.style.left = pipeX + 'px';
+
+        if (pipeX + 60 < 0) {
+          clearInterval(movePipe);
+          game.removeChild(topPipe);
+          game.removeChild(bottomPipe);
+          score++;
+          scoreDisplay.textContent = 'Score: ' + score;
+        }
+
+        const playerRect = player.getBoundingClientRect();
+        const topRect = topPipe.getBoundingClientRect();
+        const bottomRect = bottomPipe.getBoundingClientRect();
+
+        if (
+          playerRect.right > topRect.left &&
+          playerRect.left < topRect.right &&
+          (playerRect.top < topRect.bottom || playerRect.bottom > bottomRect.top)
+        ) {
+          if (!shieldActive) endGame();
+        }
+      }, 16);
+    }
+
+    function createPowerUp(yPos, type) {
+      const powerup = document.createElement('div');
+      powerup.classList.add('powerup', type);
+      powerup.style.top = yPos + 'px';
+      powerup.style.left = '400px';
+      game.appendChild(powerup);
+
+      let powerupX = 400;
+      const movePowerup = setInterval(() => {
+        if (gameOver) {
+          clearInterval(movePowerup);
+          return;
+        }
+
+        powerupX -= pipeSpeed;
+        powerup.style.left = powerupX + 'px';
+
+        const playerRect = player.getBoundingClientRect();
+        const powerupRect = powerup.getBoundingClientRect();
+
+        if (
+          playerRect.left < powerupRect.right &&
+          playerRect.right > powerupRect.left &&
+          playerRect.top < powerupRect.bottom &&
+          playerRect.bottom > powerupRect.top
+        ) {
+          applyPowerUp(type);
+          clearInterval(movePowerup);
+          game.removeChild(powerup);
+        }
+
+        if (powerupX < -20) {
+          clearInterval(movePowerup);
+          if (game.contains(powerup)) game.removeChild(powerup);
+        }
+      }, 16);
+    }
+
+    function applyPowerUp(type) {
+      switch(type) {
+        case 'boost':
+          velocity = -12;
+          score += 5;
+          scoreDisplay.textContent = 'Score: ' + score;
+          break;
+        case 'shield':
+          shieldActive = true;
+          statusDisplay.textContent = '🛡️ Shield Active';
+          setTimeout(() => {
+            shieldActive = false;
+            statusDisplay.textContent = '';
+          }, 5000);
+          break;
+        case 'slow':
+          if (!slowActive) {
+            pipeSpeed = 1;
+            slowActive = true;
+            statusDisplay.textContent = '🐌 Slow Time';
+            setTimeout(() => {
+              pipeSpeed = 2;
+              slowActive = false;
+              statusDisplay.textContent = '';
+            }, 5000);
+          }
+          break;
+      }
+    }
+
+    function endGame() {
+      gameOver = true;
+      if (score > highScore) {
+        localStorage.setItem('flappyHighScore', score);
+        alert("🎉 New High Score: " + score + "!");
+      } else {
+        alert("Game Over! Your score: " + score);
+      }
+      location.reload();
+    }
+
+    function update() {
+      if (gameOver) return;
+
+      velocity += gravity;
+      const top = parseInt(player.style.top || '200');
+      player.style.top = (top + velocity) + 'px';
+
+      if (top + velocity > 570 || top + velocity < 0) {
+        endGame();
+      }
+
+      requestAnimationFrame(update);
+    }
+
+    setInterval(() => {
+      if (!gameOver) createPipe();
+    }, 1500);
+
+    update();
+  </script>
+</body>
+</html>
+
